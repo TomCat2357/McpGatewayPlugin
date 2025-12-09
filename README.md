@@ -37,15 +37,15 @@ MCP Gateway is a parent MCP server that acts as a gateway to manage multiple chi
 ### Option 1: From GitHub (Recommended for distribution)
 
 ```bash
-claude plugin install https://github.com/yourusername/mcp-gateway-plugin
+claude plugin install https://github.com/TomCat2357/MCPgatewayPlugin
 ```
 
 ### Option 2: Local Development
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/mcp-gateway-plugin.git
-cd mcp-gateway-plugin
+git clone https://github.com/TomCat2357/MCPgatewayPlugin.git
+cd MCPgatewayPlugin
 ```
 
 2. Use with Claude Code:

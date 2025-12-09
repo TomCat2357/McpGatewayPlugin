@@ -1,0 +1,31 @@
+{
+  "name": "mcp-gateway-tools",
+  "owner": {
+    "name": "TomCat2357",
+    "email": "user@example.com"
+  },
+  "metadata": {
+    "description": "Marketplace for MCP Gateway plugin and related tools",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "mcp-gateway",
+      "source": {
+        "source": "github",
+        "repo": "TomCat2357/MCPgatewayPlugin"
+      },
+      "description": "A Claude Code plugin for managing MCP Gateway - a parent MCP server that manages multiple child MCP servers with unified tool access",
+      "version": "0.1.0",
+      "author": {
+        "name": "TomCat2357",
+        "email": "user@example.com"
+      },
+      "homepage": "https://github.com/TomCat2357/MCPgateway",
+      "repository": "https://github.com/TomCat2357/MCPgatewayPlugin",
+      "license": "MIT",
+      "keywords": ["mcp", "gateway", "multiple-servers", "integration", "tools"],
+      "category": "integration"
+    }
+  ]
+}
