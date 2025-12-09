@@ -1,0 +1,8 @@
+[[children]]
+name = "example-server"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-example"]
+
+# Optional environment variables for this server
+# [children.env]
+# EXAMPLE_VAR = "value"

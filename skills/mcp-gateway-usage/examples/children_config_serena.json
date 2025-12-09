@@ -1,0 +1,10 @@
+[
+  {
+    "name": "serena",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-serena"],
+    "env": {
+      "SERENA_WORKSPACE": "${HOME}/projects"
+    }
+  }
+]

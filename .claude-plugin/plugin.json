@@ -1,0 +1,13 @@
+{
+  "name": "mcp-gateway",
+  "version": "0.1.0",
+  "description": "A Claude Code plugin for managing MCP Gateway - a parent MCP server that manages multiple child MCP servers with unified tool access",
+  "author": {
+    "name": "User",
+    "email": "user@example.com"
+  },
+  "homepage": "https://github.com/TomCat2357/MCPgateway",
+  "repository": "https://github.com/yourusername/mcp-gateway-plugin",
+  "license": "MIT",
+  "keywords": ["mcp", "gateway", "multiple-servers", "integration", "tools"]
+}
