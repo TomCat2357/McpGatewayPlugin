@@ -40,27 +40,42 @@ except ModuleNotFoundError:
 with open(config_path, "rb") as f:
     data = tomllib.load(f)
 
-servers = None
-if isinstance(data, list):
-    servers = data
-elif isinstance(data, dict):
-    for key in ("children", "servers", "config", "entries"):
-        value = data.get(key)
-        if isinstance(value, list):
-            servers = value
-            break
+def normalize_to_mcp_servers(obj):
+    # New format (recommended)
+    for key in ("mcpServers", "mcp_servers", "mcp-servers"):
+        value = obj.get(key)
+        if isinstance(value, dict):
+            return value
 
-if servers is None:
-    sys.stderr.write("Error: TOML config must provide an array of tables (e.g., [[children]]).\n")
+    # Legacy format: [[children]] with name field
+    children = obj.get("children")
+    if isinstance(children, list):
+        servers = {}
+        for idx, entry in enumerate(children):
+            if not isinstance(entry, dict):
+                raise ValueError(f"Entry {idx + 1} is not a table/object.")
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"Entry {idx + 1} is missing 'name'.")
+            server = dict(entry)
+            server.pop("name", None)
+            servers[name] = server
+        return servers
+
+    raise ValueError("TOML must define either [mcp-servers.<name>] (recommended) or [[children]] (legacy).")
+
+
+try:
+    if isinstance(data, dict):
+        mcp_servers = normalize_to_mcp_servers(data)
+    else:
+        raise ValueError("TOML root must be a table/object.")
+except Exception as e:
+    sys.stderr.write(f"Error: {e}\n")
     sys.exit(1)
 
-for idx, entry in enumerate(servers):
-    if not isinstance(entry, dict):
-        sys.stderr.write(f"Error: Entry {idx + 1} is not a table/object.\n")
-        sys.exit(1)
-
 with open(output_path, "w", encoding="utf-8") as f:
-    json.dump(servers, f)
+    json.dump({"mcpServers": mcp_servers}, f, ensure_ascii=False)
 PY
     then
         exit 1
@@ -76,67 +91,61 @@ if ! jq empty "$VALIDATION_TARGET" 2>/dev/null; then
     exit 1
 fi
 
-# Check if it's an array
-if [ "$(jq 'type' "$VALIDATION_TARGET")" != '"array"' ]; then
-    echo "Error: Configuration must be an array of server entries"
-    exit 1
-fi
+# Extract server map (supports new and legacy shapes)
+SERVER_MAP="$(jq -c '
+  if type == "object" and (.mcpServers? | type == "object") then .mcpServers
+  elif type == "array" then (map(select(type=="object" and (.name? | type=="string"))) | map({(.name): (del(.name))}) | add) // {}
+  elif type == "object" then .
+  else {}
+  end
+' "$VALIDATION_TARGET")"
 
-# Validate each server entry
-server_count=$(jq 'length' "$VALIDATION_TARGET")
+server_count="$(printf '%s' "$SERVER_MAP" | jq 'keys | length')"
 echo "Found $server_count server(s)"
 
-for i in $(seq 0 $((server_count - 1))); do
+if [ "$server_count" -eq 0 ]; then
     echo ""
-    echo "Validating server $((i + 1))..."
+    echo "✓ Configuration is valid (no servers configured yet)"
+    echo ""
+    echo "Summary:"
+    echo "  Total servers: 0"
+    echo "  Configuration file: $CONFIG_FILE"
+    exit 0
+fi
 
-    # Check required fields
-    name=$(jq -r ".[$i].name // empty" "$VALIDATION_TARGET")
-    command=$(jq -r ".[$i].command // empty" "$VALIDATION_TARGET")
-    args=$(jq -r ".[$i].args // empty" "$VALIDATION_TARGET")
+while IFS= read -r name; do
+    echo ""
+    echo "Validating server: $name"
 
-    if [ -z "$name" ]; then
-        echo "  Error: Missing 'name' field"
-        exit 1
-    fi
-    echo "  Name: $name"
-
-    if [ -z "$command" ]; then
+    command="$(printf '%s' "$SERVER_MAP" | jq -r --arg n "$name" '.[$n].command // empty')"
+    if [ -z "$command" ] || [ "$command" = "null" ]; then
         echo "  Error: Missing 'command' field"
         exit 1
     fi
     echo "  Command: $command"
 
-    if [ -z "$args" ]; then
-        echo "  Error: Missing 'args' field"
-        exit 1
-    fi
-
-    # Check if args is an array
-    if [ "$(jq ".[$i].args | type" "$VALIDATION_TARGET")" != '"array"' ]; then
+    if [ "$(printf '%s' "$SERVER_MAP" | jq -r --arg n "$name" '.[$n].args | type')" != "array" ]; then
         echo "  Error: 'args' must be an array"
         exit 1
     fi
-    echo "  Args: $(jq -c ".[$i].args" "$VALIDATION_TARGET")"
+    echo "  Args: $(printf '%s' "$SERVER_MAP" | jq -c --arg n "$name" '.[$n].args')"
 
-    # Check env (optional but must be object if present)
-    if jq -e ".[$i].env" "$VALIDATION_TARGET" > /dev/null 2>&1; then
-        if [ "$(jq ".[$i].env | type" "$VALIDATION_TARGET")" != '"object"' ]; then
+    if [ "$(printf '%s' "$SERVER_MAP" | jq -r --arg n "$name" '.[$n] | has("env")')" = "true" ]; then
+        if [ "$(printf '%s' "$SERVER_MAP" | jq -r --arg n "$name" '.[$n].env | type')" != "object" ]; then
             echo "  Error: 'env' must be an object"
             exit 1
         fi
-        echo "  Env: $(jq -c ".[$i].env" "$VALIDATION_TARGET")"
+        echo "  Env: $(printf '%s' "$SERVER_MAP" | jq -c --arg n "$name" '.[$n].env')"
     else
         echo "  Env: (not specified)"
     fi
 
-    # Check if command exists
     if ! command -v "$command" &> /dev/null; then
         echo "  Warning: Command '$command' not found in PATH"
     else
         echo "  ✓ Command found: $(command -v "$command")"
     fi
-done
+done < <(printf '%s' "$SERVER_MAP" | jq -r 'keys[]')
 
 echo ""
 echo "✓ Configuration validation passed!"
