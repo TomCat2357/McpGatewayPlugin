@@ -1,5 +1,5 @@
 ---
-description: MCP Gateway を .mcp.json / .toml に追加する
+description: MCP Gateway を Claude Code（~/.claude.json）/ Codex CLI（.toml）に追加する
 argument-hint: [config-file-path]
 allowed-tools: Read, Write, Edit, AskUserQuestion
 ---
@@ -12,13 +12,13 @@ allowed-tools: Read, Write, Edit, AskUserQuestion
 1. 設定対象ファイルのパスを決める（ユーザーには質問しない）
    - `$ARGUMENTS` があればそれを使う
    - 無ければ、プラグインスコープに合わせて自動選択する
-     - `./.mcp.json` が存在する → Claude Code（プロジェクトスコープ）として `./.mcp.json`
+     - `~/.claude.json` が存在する → Claude Code（ユーザースコープ）として `~/.claude.json`
      - それ以外で `~/.codex/config.toml` が存在する → Codex CLI（ユーザースコープ）として `~/.codex/config.toml`
      - どちらも無い → 対象ファイルが特定できないため終了（`$ARGUMENTS` で明示してもらう）
 2. 形式を判定（ユーザーに “どの環境か” は聞かない）
    - 拡張子が `.toml` → Codex CLI 形式（TOML）
-   - 拡張子が `.json` → Claude Code 形式（JSON）
-   - それ以外は、ユーザーに「`.mcp.json` か `.toml` を指定してほしい」旨を伝えて終了
+   - 拡張子が `.json` → Claude Code 形式（JSON、既定は `~/.claude.json`）
+   - それ以外は、ユーザーに「`~/.claude.json` か `.toml` を指定してほしい」旨を伝えて終了
 3. 実行環境（Windows / WSL）の扱いを “質問せず” に判断する
    - 以降でユーザーから受け取るパス表記が `C:\\...` / `D:\\...` のような Windows 形式なら Windows として扱う
    - `/...` や `/mnt/...` のような POSIX 形式なら WSL/Linux として扱う
@@ -36,33 +36,31 @@ allowed-tools: Read, Write, Edit, AskUserQuestion
    - 既に `--children-config` / `--children-abstract` が入っている場合は値を置換（重複させない）
    - `--children-abstract` が空欄の場合は、`--children-abstract` 自体を `args` に入れない
 
-**追加/更新する設定（Claude Code / `.mcp.json`）**
-- `mcpServers.mcp-gateway.command` は `uvx`
-- `mcpServers.mcp-gateway.args` は以下を含む（`--children-abstract` は任意）
+**追加/更新する設定（Claude Code / `~/.claude.json`）**
+- `~/.claude.json` の「該当スコープ」配下の `mcpServers.mcp-gateway.command` は `uvx`
+- `~/.claude.json` の「該当スコープ」配下の `mcpServers.mcp-gateway.args` は以下を含む（`--children-abstract` は任意）
   - `--python` `3.12`
   - `--from` `git+https://github.com/TomCat2357/MCPgateway`
   - `mcp-gateway`
   - `--children-config` `<ABSOLUTE_PATH>`
   - （任意）`--children-abstract` `<ABSOLUTE_PATH>`
 
-例（`children_abstract.json` も使う場合）:
+例（`mcpServers` ブロックの中身、`children_abstract.json` も使う場合）:
 ```json
 {
-  "mcpServers": {
-    "mcp-gateway": {
-      "command": "uvx",
-      "args": [
-        "--python",
-        "3.12",
-        "--from",
-        "git+https://github.com/TomCat2357/MCPgateway",
-        "mcp-gateway",
-        "--children-config",
-        "/absolute/path/to/children_config.json",
-        "--children-abstract",
-        "/absolute/path/to/children_abstract.json"
-      ]
-    }
+  "mcp-gateway": {
+    "command": "uvx",
+    "args": [
+      "--python",
+      "3.12",
+      "--from",
+      "git+https://github.com/TomCat2357/MCPgateway",
+      "mcp-gateway",
+      "--children-config",
+      "/absolute/path/to/children_config.json",
+      "--children-abstract",
+      "/absolute/path/to/children_abstract.json"
+    ]
   }
 }
 ```
@@ -95,5 +93,6 @@ args = [
 ```
 
 **注意**
+- Claude Code と Codex CLI の設定ファイルは別物（Claude Code は `~/.claude.json`、Codex CLI は `~/.codex/config.toml`）
 - `--children-config` / `--children-abstract` は「mcp-gateway を起動する環境（WSL/Windows）から見える絶対パス」
 - WSL で動かすなら `/mnt/c/...` も “WSLから見えるパス” として有効（Windows の `C:\\...` とは別物なので混ぜない）
