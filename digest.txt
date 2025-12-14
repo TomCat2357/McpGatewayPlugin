@@ -1,0 +1,566 @@
+Directory structure:
+└── McpGatewayPlugin/
+    ├── commands/
+    │   ├── add-to-config.md
+    │   ├── close-session.md
+    │   ├── execute-tool.md
+    │   ├── generate-children-abstract.md
+    │   ├── generate-children-config.md
+    │   ├── get-resource.md
+    │   ├── get-schema.md
+    │   ├── get-status.md
+    │   ├── list-children.md
+    │   └── list-resources.md
+    └── skills/
+        └── mcp-gateway-usage/
+            ├── SKILL.md
+            ├── examples/
+            ├── references/
+            │   ├── children-abstract.md
+            │   └── troubleshooting.md
+            └── scripts/
+                └── validate-config.sh
+
+================================================
+FILE: commands/add-to-config.md
+================================================
+---
+description: MCP Gateway を .mcp.json / .toml に追加する
+argument-hint: [config-file-path]
+allowed-tools: Read, Write, Edit, AskUserQuestion
+---
+
+指定ファイルに `mcp-gateway` サーバー設定を追記します。
+
+**対象ファイル**: `$ARGUMENTS`（省略時は質問）
+
+**手順**
+1. 対象パスを決める（無ければ質問）
+2. 拡張子で形式を判定（`.json` / `.toml`）
+3. ユーザーに絶対パスを確認して質問
+   - `children_config`（`.json` / `.toml`）
+   - `children_abstract.json`（推奨）
+4. 追加する設定を提示し、y/n で確認してから書き込み
+
+**追加する設定（概要）**
+- `.mcp.json`：`mcpServers.mcp-gateway.args` に `--children-config` と `--children-abstract` を入れる
+- `.toml`：`[mcp-servers.mcp-gateway]` の `args` に同様に入れる
+
+**注意**
+- パスは「mcp-gateway を起動する環境（WSL/Windows）から見える絶対パス」
+
+
+
+================================================
+FILE: commands/close-session.md
+================================================
+---
+description: child セッションを明示的に閉じる
+argument-hint: <child-name>
+allowed-tools: mcp__mcp-gateway__close_child_session
+---
+
+指定 child のセッションを閉じます（通常は不要）。
+
+**引数**
+- `$1`：child 名（必須）
+
+**手順**
+1. `$1` が無ければ usage を出して終了（必要なら `/mcp-gateway:list-children`）
+2. 確認してから実行（y/n）
+3. `mcp__mcp-gateway__close_child_session` を呼ぶ
+   - `child_name`: `$1`
+4. 結果を表示し、必要なら `/mcp-gateway:get-status $1` を案内
+
+
+
+================================================
+FILE: commands/execute-tool.md
+================================================
+---
+description: child MCP の tool を実行する
+argument-hint: <child-name> <tool-name> [tool-args-json] [head_chars=N] [tail_chars=N]
+allowed-tools: mcp__mcp-gateway__execute_child_tool
+---
+
+MCP Gateway 経由で child の tool を実行します。
+
+**引数**
+- `$1`：child 名（必須）
+- `$2`：tool 名（必須）
+- `$3+`：`tool-args-json`（任意）と `head_chars=N` / `tail_chars=N`（任意）
+
+**手順**
+1. `$1` / `$2` が無ければ usage を出して終了（必要なら `/mcp-gateway:list-children` を案内）
+2. `$3+` から以下を抽出
+   - `tool_args`：JSON オブジェクト（無ければ `{}`）
+   - `head_chars` / `tail_chars`：指定があれば値を使う（出力を文字数で短縮）
+3. `mcp__mcp-gateway__execute_child_tool` を呼ぶ
+   - `child_name`: `$1`
+   - `tool_name`: `$2`
+   - `tool_args`: 解析した JSON（省略時 `{}`）
+   - `head_chars` / `tail_chars`: 任意
+4. 成功時は出力を表示。失敗時は `/mcp-gateway:get-status $1` を案内
+5. tool 名/引数が不明なら `children_abstract.json`（推奨）→必要なら `/mcp-gateway:get-schema $1`
+
+
+
+================================================
+FILE: commands/generate-children-abstract.md
+================================================
+---
+description: children_abstract.json の最小テンプレートを生成する
+argument-hint: [output-path]
+allowed-tools: Read, Write, AskUserQuestion
+---
+
+`children_abstract.json` を作成します（child tool の要約。トークン節約に有効）。
+
+**手順**
+1. 出力パスを決める（無ければ `./children_abstract.json`）
+2. 既存ファイルがあれば上書き確認（y/n）
+3. `{}` を書き込む
+
+必要になったら `skills/mcp-gateway-usage/references/children-abstract.md` の形で追記する。
+
+
+
+================================================
+FILE: commands/generate-children-config.md
+================================================
+---
+description: children_config テンプレートを生成する
+argument-hint: [output-path]
+allowed-tools: Read, Write, AskUserQuestion
+---
+
+child 定義ファイル（`children_config.*`）の最小テンプレートを作ります。
+
+**手順**
+1. 出力パスを決める（無ければ json/toml を質問して `./children_config.json` or `./children_config.toml`）
+2. 既存ファイルがあれば上書き確認（y/n）
+3. テンプレートを書き込む
+   - JSON：Claude Code 互換の `mcpServers` 形式
+   - TOML：Codex 互換の `[mcp-servers.<name>]` 形式
+
+**JSON（最小）**
+```json
+{ "mcpServers": {} }
+```
+
+**TOML（最小）**
+```toml
+# empty
+```
+
+作成後は `/mcp-gateway:add-to-config` で mcp-gateway 側にパスを設定します。
+
+
+
+================================================
+FILE: commands/get-resource.md
+================================================
+---
+description: MCP server の resource を取得して表示する
+argument-hint: <resource-name-or-uri> [server-name]
+allowed-tools: list_mcp_resources,read_mcp_resource
+---
+
+MCP server の resource を取得して表示します。
+
+**引数**
+- `$1`：resource 名（推奨）または resource URI（`mcp://...`）（必須）
+- `$2`：server 名（任意、無ければ `mcp-gateway`）
+
+**手順**
+1. `$1` が無ければ usage を出して終了（必要なら `/mcp-gateway:list-resources`）
+2. server 名を決める（`$2` が無ければ `mcp-gateway`）
+3. `$1` が `mcp://` で始まるなら、それを `uri` として扱う
+4. そうでなければ `list_mcp_resources` を呼び、`name == $1` の resource を探して `uri` を決める
+   - 見つからなければ `/mcp-gateway:list-resources $2` を案内して終了
+   - 複数ヒットするなら候補（`name`/`uri`）を列挙して終了
+5. `read_mcp_resource` を呼ぶ
+   - `server`: 決めた server 名
+   - `uri`: 決めた uri
+6. `contents` を表示（`text` があればそのまま、なければ JSON を表示）
+
+
+
+
+================================================
+FILE: commands/get-schema.md
+================================================
+---
+description: child の schema（tools/resources）を取得する
+argument-hint: <child-name>
+allowed-tools: mcp__mcp-gateway__get_schema
+---
+
+child の tool / resource schema を取得します（重いので必要なときだけ）。
+
+**引数**
+- `$1`：child 名（必須）
+
+**手順**
+1. `$1` が無ければ usage を出して終了（必要なら `/mcp-gateway:list-children`）
+2. `mcp__mcp-gateway__get_schema` を呼ぶ
+   - `child_name`: `$1`
+3. 返ってきた `tools` / `resources` を見やすく整形して表示
+4. 次の一手として `/mcp-gateway:execute-tool $1 <tool> {...}` を案内
+
+
+
+================================================
+FILE: commands/get-status.md
+================================================
+---
+description: child の起動状態/エラーを確認する
+argument-hint: <child-name>
+allowed-tools: mcp__mcp-gateway__get_child_status
+---
+
+指定 child の起動状態とエラーを確認します。
+
+**引数**
+- `$1`：child 名（必須）
+
+**手順**
+1. `$1` が無ければ usage を出して終了（必要なら `/mcp-gateway:list-children`）
+2. `mcp__mcp-gateway__get_child_status` を呼ぶ
+   - `child_name`: `$1`
+3. 結果をそのまま/見やすく整形して表示
+4. 次の一手として `/mcp-gateway:execute-tool` または設定修正（`children_config`）を案内
+
+
+
+================================================
+FILE: commands/list-children.md
+================================================
+---
+description: 登録済み child 一覧を表示する
+allowed-tools: mcp__mcp-gateway__list_registered_children
+---
+
+MCP Gateway に登録された child 一覧を表示します。
+
+**手順**
+1. `mcp__mcp-gateway__list_registered_children` を呼ぶ（引数なし）
+2. child 名を列挙して表示（件数も併記）
+3. 次の一手として `/mcp-gateway:get-status <child>` と `/mcp-gateway:execute-tool <child> <tool> {...}` を案内
+
+
+
+================================================
+FILE: commands/list-resources.md
+================================================
+---
+description: MCP server の resource 一覧を表示する
+argument-hint: [server-name]
+allowed-tools: list_mcp_resources
+---
+
+MCP server が公開している resource 一覧を表示します。
+
+**引数**
+- `$1`：server 名（任意、無ければ `mcp-gateway`）
+
+**手順**
+1. server 名を決める（`$1` が無ければ `mcp-gateway`）
+2. `list_mcp_resources` を呼ぶ
+   - `server`: 決めた server 名
+3. 返ってきた resource を `name` / `uri` / `mimeType` / `description` で整形して表示（件数も併記）
+4. 次の一手として `/mcp-gateway:get-resource <resource-name> [server-name]` を案内
+
+
+
+
+================================================
+FILE: skills/mcp-gateway-usage/SKILL.md
+================================================
+---
+name: MCP Gateway Usage
+description: MCP Gateway / children_config / children_abstract / execute_child_tool の基本に答えるときに使う。
+version: 0.2.0
+---
+
+# MCP Gateway（基本）
+
+MCP Gateway は複数の child MCP server をまとめて管理し、1つの窓口から tool を実行します。
+
+## 最小構成
+
+- `children_config.(json|toml)`：child 定義
+- `children_abstract.json`：child の tool 要約（スキーマ取得を減らすため推奨）
+
+メモ: `children_config.json` は `{"mcpServers": { ... }}` 形式が基本。
+
+## セットアップ（推奨ルート）
+
+- 設定追加：`/mcp-gateway:add-to-config`（`.mcp.json` または `.toml`）
+- テンプレ生成：`/mcp-gateway:generate-children-config`
+- 追加で用意：`/mcp-gateway:generate-children-abstract`（推奨）
+
+## 使い方（最小）
+
+1) child 一覧：`/mcp-gateway:list-children`  
+2) tool 実行：`/mcp-gateway:execute-tool <child> <tool> [tool_args_json] [head_chars=N] [tail_chars=N]`
+
+メモ:
+- `tool_args_json` は JSON オブジェクト（省略時は `{}`）。
+- `head_chars` / `tail_chars` は「文字数」で出力を短縮（トークン節約）。
+
+## 子toolの調べ方（トークン節約）
+
+1) まず `children_abstract.json` の該当 child だけ読む  
+2) 不明点が残る場合のみ `/mcp-gateway:get-schema <child>` を使う
+
+## WSL / PowerShell 差異（最低限）
+
+- `--children-config` / `--children-abstract` は「実行環境から見える絶対パス」を指定する
+- child の `command` は環境により差が出るため、動かない場合は `get-status` のエラーに従って修正する
+
+## 詳細（必要なときだけ）
+
+- `references/children-abstract.md`：`children_abstract.json` の運用（推奨）
+- `references/troubleshooting.md`：起動/実行のよくある問題
+
+
+
+
+================================================
+FILE: skills/mcp-gateway-usage/references/children-abstract.md
+================================================
+# children_abstract.json（トークン節約用メモ）
+
+`children_abstract.json` は、child ごとの「よく使う tool 名」と「最低限の引数形」を短くまとめるための JSON です。  
+LLM が `/mcp-gateway:get-schema` を多用しなくても `/mcp-gateway:execute-tool` を組み立てられる状態を目指します。
+
+## 方針
+
+- 1 child あたり 3〜10 tool 程度に絞る（全部は載せない）
+- `overview` は 1〜2 行で十分
+- `execute_child_tool` は “そのまま実行できる” 形で置く（コピペ可能な形）
+- 状態（running など）は不要なら書かない（変化すると差分/トークンが増える）
+
+## 例（最小）
+
+```json
+{
+  "serena": {
+    "description": "コード検索/シンボル探索",
+    "execute_via": "mcp-gateway/execute_child_tool",
+    "child_name": "serena",
+    "tools": [
+      {
+        "tool_name": "search_code",
+        "overview": "全文/セマンティック検索",
+        "execute_child_tool": {
+          "child_name": "serena",
+          "tool_name": "search_code",
+          "tool_args": {
+            "query": "function main"
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+## 運用のコツ
+
+- child を追加/変更したら、まず `children_abstract.json` を更新する  
+  → LLM が「tool 名・引数」をすぐ理解できるため、schema 取得が減る
+- 不明点が残る場合のみ `/mcp-gateway:get-schema <child>`（一回だけ）で補完して抽象へ反映する
+
+
+
+
+================================================
+FILE: skills/mcp-gateway-usage/references/troubleshooting.md
+================================================
+# Troubleshooting（最小）
+
+## child が起動しない
+
+- `/mcp-gateway:get-status <child>` のエラーを見る
+- `children_config.(json|toml)` の `command` / `args` を見直す
+  - WSL と Windows/PowerShell でコマンド名や PATH が違う場合がある
+  - 動作確認は「その環境のターミナル」で行う
+
+## WSL / Windows でパスが噛み合わない
+
+- mcp-gateway が WSL 側で動いているなら、`--children-config` / `--children-abstract` も WSL から見えるパスにする
+- mcp-gateway が Windows 側で動いているなら、Windows から見えるパスにする
+
+## tool が見つからない / 引数が違う
+
+- まず `children_abstract.json` を確認（古いなら更新）
+- それでも不明なら `/mcp-gateway:get-schema <child>` を一度だけ実行して確認
+
+## 出力が長すぎる
+
+- `/mcp-gateway:execute-tool ... head_chars=N tail_chars=N` を使って文字数で短縮する
+
+
+
+================================================
+FILE: skills/mcp-gateway-usage/scripts/validate-config.sh
+================================================
+#!/bin/bash
+# Validate children_config.json / children_config.toml structure
+
+set -euo pipefail
+
+CONFIG_FILE="${1:-children_config.json}"
+TMP_JSON=""
+
+cleanup() {
+    if [ -n "$TMP_JSON" ] && [ -f "$TMP_JSON" ]; then
+        rm -f "$TMP_JSON"
+    fi
+}
+trap cleanup EXIT
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Configuration file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+echo "Validating $CONFIG_FILE..."
+
+if [[ "$CONFIG_FILE" == *.toml ]]; then
+    TMP_JSON="$(mktemp)"
+    if ! python - "$CONFIG_FILE" "$TMP_JSON" <<'PY'
+import json
+import sys
+
+config_path, output_path = sys.argv[1], sys.argv[2]
+
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:
+    try:
+        import tomli as tomllib  # Backport
+    except ModuleNotFoundError:
+        sys.stderr.write("Error: tomllib/tomli is required to parse TOML. Install tomli or use Python 3.11+.\n")
+        sys.exit(1)
+
+with open(config_path, "rb") as f:
+    data = tomllib.load(f)
+
+def normalize_to_mcp_servers(obj):
+    # New format (recommended)
+    for key in ("mcpServers", "mcp_servers", "mcp-servers"):
+        value = obj.get(key)
+        if isinstance(value, dict):
+            return value
+
+    # Legacy format: [[children]] with name field
+    children = obj.get("children")
+    if isinstance(children, list):
+        servers = {}
+        for idx, entry in enumerate(children):
+            if not isinstance(entry, dict):
+                raise ValueError(f"Entry {idx + 1} is not a table/object.")
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"Entry {idx + 1} is missing 'name'.")
+            server = dict(entry)
+            server.pop("name", None)
+            servers[name] = server
+        return servers
+
+    raise ValueError("TOML must define either [mcp-servers.<name>] (recommended) or [[children]] (legacy).")
+
+
+try:
+    if isinstance(data, dict):
+        mcp_servers = normalize_to_mcp_servers(data)
+    else:
+        raise ValueError("TOML root must be a table/object.")
+except Exception as e:
+    sys.stderr.write(f"Error: {e}\n")
+    sys.exit(1)
+
+with open(output_path, "w", encoding="utf-8") as f:
+    json.dump({"mcpServers": mcp_servers}, f, ensure_ascii=False)
+PY
+    then
+        exit 1
+    fi
+    VALIDATION_TARGET="$TMP_JSON"
+else
+    VALIDATION_TARGET="$CONFIG_FILE"
+fi
+
+# Check if file is valid JSON
+if ! jq empty "$VALIDATION_TARGET" 2>/dev/null; then
+    echo "Error: Invalid JSON syntax"
+    exit 1
+fi
+
+# Extract server map (supports new and legacy shapes)
+SERVER_MAP="$(jq -c '
+  if type == "object" and (.mcpServers? | type == "object") then .mcpServers
+  elif type == "array" then (map(select(type=="object" and (.name? | type=="string"))) | map({(.name): (del(.name))}) | add) // {}
+  elif type == "object" then .
+  else {}
+  end
+' "$VALIDATION_TARGET")"
+
+server_count="$(printf '%s' "$SERVER_MAP" | jq 'keys | length')"
+echo "Found $server_count server(s)"
+
+if [ "$server_count" -eq 0 ]; then
+    echo ""
+    echo "✓ Configuration is valid (no servers configured yet)"
+    echo ""
+    echo "Summary:"
+    echo "  Total servers: 0"
+    echo "  Configuration file: $CONFIG_FILE"
+    exit 0
+fi
+
+while IFS= read -r name; do
+    echo ""
+    echo "Validating server: $name"
+
+    command="$(printf '%s' "$SERVER_MAP" | jq -r --arg n "$name" '.[$n].command // empty')"
+    if [ -z "$command" ] || [ "$command" = "null" ]; then
+        echo "  Error: Missing 'command' field"
+        exit 1
+    fi
+    echo "  Command: $command"
+
+    if [ "$(printf '%s' "$SERVER_MAP" | jq -r --arg n "$name" '.[$n].args | type')" != "array" ]; then
+        echo "  Error: 'args' must be an array"
+        exit 1
+    fi
+    echo "  Args: $(printf '%s' "$SERVER_MAP" | jq -c --arg n "$name" '.[$n].args')"
+
+    if [ "$(printf '%s' "$SERVER_MAP" | jq -r --arg n "$name" '.[$n] | has("env")')" = "true" ]; then
+        if [ "$(printf '%s' "$SERVER_MAP" | jq -r --arg n "$name" '.[$n].env | type')" != "object" ]; then
+            echo "  Error: 'env' must be an object"
+            exit 1
+        fi
+        echo "  Env: $(printf '%s' "$SERVER_MAP" | jq -c --arg n "$name" '.[$n].env')"
+    else
+        echo "  Env: (not specified)"
+    fi
+
+    if ! command -v "$command" &> /dev/null; then
+        echo "  Warning: Command '$command' not found in PATH"
+    else
+        echo "  ✓ Command found: $(command -v "$command")"
+    fi
+done < <(printf '%s' "$SERVER_MAP" | jq -r 'keys[]')
+
+echo ""
+echo "✓ Configuration validation passed!"
+echo ""
+echo "Summary:"
+echo "  Total servers: $server_count"
+echo "  Configuration file: $CONFIG_FILE"
+
+
