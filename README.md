@@ -12,6 +12,8 @@ Claude Code / Codex CLI から MCP Gateway を使いやすくするためのプ�
 - `/mcp-gateway:get-status`：child 状態
 - `/mcp-gateway:get-schema`：child schema（必要時のみ）
 - `/mcp-gateway:close-session`：child セッション終了（通常不要）
+- `/mcp-gateway:list-resources`：MCP server resource 一覧（既定 `mcp-gateway`）
+- `/mcp-gateway:get-resource`：MCP server resource 取得（既定 `mcp-gateway`）
 
 ## 重要（トークン節約）
 
